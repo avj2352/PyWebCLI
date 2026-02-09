@@ -1,0 +1,13 @@
+# ignore folders
+node_modules/
+build/
+dist/
+__pycache__/
+.venv/
+.aider/
+.vscode/
+.idea/
+
+# ignore files
+.DS_Store
+Makefile

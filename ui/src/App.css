@@ -1,0 +1,11 @@
+div.App {
+  /* border: 1px solid red; */
+  padding: 20px;
+  background-color: #282c34;
+  min-height: 100vh;
+  color: white;
+}
+
+h1 {
+  margin-bottom: 20px;
+}
