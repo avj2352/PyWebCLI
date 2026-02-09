@@ -12,6 +12,7 @@ load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+APP_VERSION = "v0.2.0"
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,7 +24,17 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     prompt: str
-    model_id: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+APP_VERSION = "1.0.0"
+DEFAULT_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+@app.get("/info")
+async def info_endpoint():
+    return {
+        "app_version": APP_VERSION,
+        "model_id": os.getenv("MODEL_ID", DEFAULT_MODEL_ID)
+    }
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):

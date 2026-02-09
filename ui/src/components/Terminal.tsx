@@ -24,9 +24,12 @@ const Terminal = () => {
   const xtermRef = useRef<XTerm | null>(null);
   const inputBuffer = useRef<string>('');
   const isProcessing = useRef<boolean>(false);
+  const spinnerInterval = useRef<number | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [hasAiResponse, setHasAiResponse] = useState(false);
+  const [hasUserInput, setHasUserInput] = useState(false);
 
   // Move handleCommand out of useEffect to be accessible by buttons
   const handleCommand = async (prompt: string) => {
@@ -35,6 +38,26 @@ const Terminal = () => {
 
     isProcessing.current = true;
     term.write('\n🤖  ');
+
+    // Spinner logic
+    const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let frameIndex = 0;
+
+    // Start spinner
+    term.write(frames[0]);
+    spinnerInterval.current = window.setInterval(() => {
+      frameIndex = (frameIndex + 1) % frames.length;
+      term.write('\b' + frames[frameIndex]);
+    }, 80);
+
+    const stopSpinner = () => {
+      if (spinnerInterval.current) {
+        clearInterval(spinnerInterval.current);
+        spinnerInterval.current = null;
+        // Clear the spinner character
+        term.write('\b \b');
+      }
+    };
 
     let lineBuffer = '';
     let inCodeBlock = false;
@@ -51,8 +74,13 @@ const Terminal = () => {
         headers: {
           'Content-Type': 'application/json',
         },
+        timeout: 30000, // 30 second timeout
         responseType: 'text',
         onDownloadProgress: (progressEvent) => {
+          // Stop spinner on first data chunk
+          stopSpinner();
+          setHasAiResponse(true);
+
           const xhr = progressEvent.event.target as XMLHttpRequest;
           const fullResponse = xhr.response;
           const newChunk = fullResponse.substring(lastResponseLength);
@@ -103,8 +131,29 @@ const Terminal = () => {
       }
 
     } catch (error) {
-      term.write(`\r\nError: ${error instanceof Error ? error.message : String(error)}`);
+      stopSpinner(); // Ensure stopped on error
+
+      let errorMessage = "An unknown error occurred.";
+
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ERR_NETWORK') {
+          errorMessage = "Network Error: Unable to connect to the server. Please check your connection or server status.";
+        } else if (error.code === 'ECONNABORTED') {
+          errorMessage = "Connection Timed Out: The request took too long to process.";
+        } else if (error.response) {
+          errorMessage = `API Error: Server responded with status ${error.response.status} (${error.response.statusText})`;
+        } else {
+          errorMessage = `Request Error: ${error.message}`;
+        }
+      } else {
+        errorMessage = error instanceof Error ? error.message : String(error);
+      }
+
+      // Write in Red (\x1b[31m) and reset (\x1b[0m)
+      term.write(`\r\n\x1b[31m${errorMessage}\x1b[0m`);
+
     } finally {
+      stopSpinner(); // Ensure stopped if for some reason not stopped
       isProcessing.current = false;
       term.write('\r\n\r\n👤  ');
     }
@@ -154,11 +203,55 @@ const Terminal = () => {
     term.open(terminalRef.current);
 
     // Initial fit
-    setTimeout(() => fitAddon.fit(), 0); // Timeout to ensure layout is ready
+    setTimeout(() => fitAddon.fit(), 0);
 
-    // Initial prompt
-    term.writeln('Welcome to the AI Terminal');
-    term.write('\r\n👤  ');
+    // Fetch Info and render
+    const initTerminal = async () => {
+      try {
+        term.writeln('Connecting to server...');
+        const response = await axios.get('http://localhost:8000/info');
+        const { app_version, model_id } = response.data;
+
+        // Clear "Connecting to server..." line
+        term.write('\x1b[2K\r');
+
+        // ANSI Colors (Bright for dark mode)
+        const cyan = '\x1b[96m';
+        const magenta = '\x1b[95m';
+        const yellow = '\x1b[93m';
+        const reset = '\x1b[0m';
+        const bold = '\x1b[1m';
+
+        const versionLabel = " App Version: ";
+        const modelLabel = " Model ID:    ";
+
+        const versionStr = `${versionLabel}${app_version}`;
+        const modelStr = `${modelLabel}${model_id}`;
+
+        const contentWidth = Math.max(versionStr.length, modelStr.length) + 2; // +2 for right padding
+        const boxWidth = contentWidth;
+
+        const horizontal = '─'.repeat(boxWidth);
+
+        // Pad strings to match boxWidth
+        const versionPadded = versionStr + ' '.repeat(Math.max(0, boxWidth - versionStr.length));
+        const modelPadded = modelStr + ' '.repeat(Math.max(0, boxWidth - modelStr.length));
+
+        term.writeln(`${cyan}┌${horizontal}┐${reset}`);
+        term.writeln(`${cyan}│${bold}${yellow}${versionPadded}${reset}${cyan}│${reset}`);
+        term.writeln(`${cyan}│${magenta}${modelPadded}${reset}${cyan}│${reset}`);
+        term.writeln(`${cyan}└${horizontal}┘${reset}`);
+        term.writeln('');
+
+      } catch (error) {
+        term.writeln('\x1b[31mFailed to fetch server info.\x1b[0m');
+      }
+
+      term.writeln('Welcome to the AI Terminal');
+      term.write('\r\n👤  ');
+    };
+
+    initTerminal();
 
     // Handle resize
     const handleResize = () => {
@@ -182,6 +275,7 @@ const Terminal = () => {
         const prompt = inputBuffer.current.trim();
         term.write('\r\n'); // Move to next line
         inputBuffer.current = '';
+        setHasUserInput(false);
 
         if (prompt) {
           await handleCommand(prompt);
@@ -197,6 +291,9 @@ const Terminal = () => {
         if (inputBuffer.current.length > 0) {
           inputBuffer.current = inputBuffer.current.slice(0, -1);
           term.write('\b \b'); // Move back, print space to erase, move back again
+          if (inputBuffer.current.length === 0) {
+            setHasUserInput(false);
+          }
         }
         return;
       }
@@ -205,6 +302,7 @@ const Terminal = () => {
       if (code >= 32) {
         inputBuffer.current += data;
         term.write(data);
+        setHasUserInput(true);
       }
     });
 
@@ -222,6 +320,8 @@ const Terminal = () => {
       inputBuffer.current = '';
       isProcessing.current = false;
       xtermRef.current.focus();
+      setHasAiResponse(false);
+      setHasUserInput(false);
     }
   };
 
@@ -263,6 +363,7 @@ const Terminal = () => {
       }
       inputBuffer.current = '';
       xtermRef.current.focus();
+      setHasUserInput(false);
     }
   };
 
@@ -271,6 +372,7 @@ const Terminal = () => {
       const prompt = inputBuffer.current.trim();
       xtermRef.current.write('\r\n');
       inputBuffer.current = '';
+      setHasUserInput(false);
       await handleCommand(prompt);
     }
   };
@@ -290,16 +392,16 @@ const Terminal = () => {
       {/* Top Right Controls */}
       <div style={{ position: 'absolute', top: 10, right: 30, zIndex: 10 }}>
         <SpaceBetween direction="horizontal" size="xs">
-          <Button onClick={handleNew} variant="primary">new</Button>
-          <Button onClick={handleSaveOpen} variant="primary">save</Button>
+          <Button onClick={handleNew} variant="primary" disabled={!hasAiResponse}>new</Button>
+          <Button onClick={handleSaveOpen} variant="primary" disabled={!hasAiResponse}>save</Button>
         </SpaceBetween>
       </div>
 
       {/* Bottom Right Controls */}
       <div style={{ position: 'absolute', bottom: 40, right: 30, zIndex: 10 }}>
         <SpaceBetween direction="horizontal" size="xs">
-          <Button onClick={handleClearInput} variant="primary">clear</Button>
-          <Button onClick={handleSubmit} variant="primary">submit</Button>
+          <Button onClick={handleClearInput} variant="primary" disabled={!hasUserInput}>clear</Button>
+          <Button onClick={handleSubmit} variant="primary" disabled={!hasUserInput}>submit</Button>
         </SpaceBetween>
       </div>
 
