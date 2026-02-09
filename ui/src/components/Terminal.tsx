@@ -7,12 +7,21 @@ import { highlightCodeToAnsi } from '@/utils/highlight';
 import '@xterm/xterm/css/xterm.css';
 import {
   Button,
-  Modal,
-  SpaceBetween,
-  Input,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
   Box,
-  FormField
-} from "@cloudscape-design/components";
+  Typography,
+  IconButton,
+  Tooltip,
+  Stack
+} from "@mui/material";
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import SendIcon from '@mui/icons-material/Send';
+import SaveIcon from '@mui/icons-material/Save';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
 interface ChatRequest {
   prompt: string;
@@ -31,7 +40,6 @@ const Terminal = () => {
   const [hasAiResponse, setHasAiResponse] = useState(false);
   const [hasUserInput, setHasUserInput] = useState(false);
 
-  // Move handleCommand out of useEffect to be accessible by buttons
   const handleCommand = async (prompt: string) => {
     const term = xtermRef.current;
     if (!term) return;
@@ -39,11 +47,9 @@ const Terminal = () => {
     isProcessing.current = true;
     term.write('\n🤖  ');
 
-    // Spinner logic
     const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
     let frameIndex = 0;
 
-    // Start spinner
     term.write(frames[0]);
     spinnerInterval.current = window.setInterval(() => {
       frameIndex = (frameIndex + 1) % frames.length;
@@ -54,7 +60,6 @@ const Terminal = () => {
       if (spinnerInterval.current) {
         clearInterval(spinnerInterval.current);
         spinnerInterval.current = null;
-        // Clear the spinner character
         term.write('\b \b');
       }
     };
@@ -71,13 +76,10 @@ const Terminal = () => {
       };
 
       await axios.post('http://localhost:8000/chat', payload, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000, // 30 second timeout
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000,
         responseType: 'text',
         onDownloadProgress: (progressEvent) => {
-          // Stop spinner on first data chunk
           stopSpinner();
           setHasAiResponse(true);
 
@@ -90,26 +92,23 @@ const Terminal = () => {
 
           lineBuffer += newChunk;
 
-          // Process lines
           let newlineIndex;
           while ((newlineIndex = lineBuffer.indexOf('\n')) !== -1) {
             const line = lineBuffer.substring(0, newlineIndex);
             lineBuffer = lineBuffer.substring(newlineIndex + 1);
 
-            // Check for code block toggles
             if (line.trim().startsWith('```')) {
               if (inCodeBlock) {
                 inCodeBlock = false;
                 currentLanguage = '';
-                term.writeln(line); // End block
+                term.writeln(line);
               } else {
                 inCodeBlock = true;
                 currentLanguage = line.trim().slice(3).trim();
-                term.writeln(line); // Start block
+                term.writeln(line);
               }
             } else {
               if (inCodeBlock) {
-                // Highlight line
                 const highlighted = highlightCodeToAnsi(line, currentLanguage);
                 term.writeln(highlighted);
               } else {
@@ -120,7 +119,6 @@ const Terminal = () => {
         },
       });
 
-      // Process remaining buffer (last line without newline)
       if (lineBuffer) {
         if (inCodeBlock) {
           const highlighted = highlightCodeToAnsi(lineBuffer, currentLanguage);
@@ -131,29 +129,25 @@ const Terminal = () => {
       }
 
     } catch (error) {
-      stopSpinner(); // Ensure stopped on error
-
+      stopSpinner();
       let errorMessage = "An unknown error occurred.";
 
       if (axios.isAxiosError(error)) {
         if (error.code === 'ERR_NETWORK') {
-          errorMessage = "Network Error: Unable to connect to the server. Please check your connection or server status.";
+          errorMessage = "Network Error: Unable to connect to the server.";
         } else if (error.code === 'ECONNABORTED') {
-          errorMessage = "Connection Timed Out: The request took too long to process.";
+          errorMessage = "Connection Timed Out.";
         } else if (error.response) {
-          errorMessage = `API Error: Server responded with status ${error.response.status} (${error.response.statusText})`;
+          errorMessage = `API Error: ${error.response.status}`;
         } else {
           errorMessage = `Request Error: ${error.message}`;
         }
       } else {
         errorMessage = error instanceof Error ? error.message : String(error);
       }
-
-      // Write in Red (\x1b[31m) and reset (\x1b[0m)
       term.write(`\r\n\x1b[31m${errorMessage}\x1b[0m`);
-
     } finally {
-      stopSpinner(); // Ensure stopped if for some reason not stopped
+      stopSpinner();
       isProcessing.current = false;
       term.write('\r\n\r\n👤  ');
     }
@@ -162,39 +156,28 @@ const Terminal = () => {
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    // Initialize xterm
     const isMobile = window.innerWidth < 768;
-    const fontSize = isMobile ? 13 : 15; // Smaller font on mobile
+    const fontSize = isMobile ? 13 : 15;
 
     const term = new XTerm({
       cursorBlink: true,
       fontSize: fontSize,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      letterSpacing: isMobile ? 0 : 0, // Adjust spacing if needed
+      fontFamily: '"JetBrains Mono", "Fira Code", "Menlo", "Monaco", monospace',
       theme: {
-        background: '#1e1e1e',
-        foreground: '#ffffff',
-        cursor: '#ffffff',
-        selectionBackground: 'rgba(255, 255, 255, 0.3)',
-        black: '#000000',
-        red: '#e06c75',
-        green: '#98c379',
-        yellow: '#e5c07b',
-        blue: '#61afef',
-        magenta: '#c678dd',
-        cyan: '#56b6c2',
-        white: '#abb2bf',
-        brightBlack: '#5c6370',
-        brightRed: '#e06c75',
-        brightGreen: '#98c379',
-        brightYellow: '#e5c07b',
-        brightBlue: '#61afef',
-        brightMagenta: '#c678dd',
-        brightCyan: '#56b6c2',
-        brightWhite: '#ffffff',
+        background: '#1e293b', // Match background.paper
+        foreground: '#e2e8f0',
+        cursor: '#6366f1',
+        selectionBackground: 'rgba(99, 102, 241, 0.3)',
+        black: '#0f172a',
+        red: '#f43f5e',
+        green: '#10b981',
+        yellow: '#f59e0b',
+        blue: '#3b82f6',
+        magenta: '#8b5cf6',
+        cyan: '#06b6d4',
+        white: '#f8fafc',
       },
       convertEol: true,
-      // Helper options for mobile scrolling/flow
       scrollback: 1000,
     });
 
@@ -202,44 +185,31 @@ const Terminal = () => {
     term.loadAddon(fitAddon);
     term.open(terminalRef.current);
 
-    // Initial fit
     setTimeout(() => fitAddon.fit(), 0);
 
-    // Fetch Info and render
     const initTerminal = async () => {
       try {
         term.writeln('Connecting to server...');
         const response = await axios.get('http://localhost:8000/info');
         const { app_version, model_id } = response.data;
 
-        // Clear "Connecting to server..." line
         term.write('\x1b[2K\r');
 
-        // ANSI Colors (Bright for dark mode)
         const cyan = '\x1b[96m';
         const magenta = '\x1b[95m';
         const yellow = '\x1b[93m';
         const reset = '\x1b[0m';
         const bold = '\x1b[1m';
 
-        const versionLabel = " App Version: ";
-        const modelLabel = " Model ID:    ";
+        const vLabel = "App Version: ";
+        const mLabel = "Model ID:    ";
 
-        const versionStr = `${versionLabel}${app_version}`;
-        const modelStr = `${modelLabel}${model_id}`;
-
-        const contentWidth = Math.max(versionStr.length, modelStr.length) + 2; // +2 for right padding
-        const boxWidth = contentWidth;
-
-        const horizontal = '─'.repeat(boxWidth);
-
-        // Pad strings to match boxWidth
-        const versionPadded = versionStr + ' '.repeat(Math.max(0, boxWidth - versionStr.length));
-        const modelPadded = modelStr + ' '.repeat(Math.max(0, boxWidth - modelStr.length));
+        const innerWidth = term.cols - 2;
+        const horizontal = "─".repeat(innerWidth);
 
         term.writeln(`${cyan}┌${horizontal}┐${reset}`);
-        term.writeln(`${cyan}│${bold}${yellow}${versionPadded}${reset}${cyan}│${reset}`);
-        term.writeln(`${cyan}│${magenta}${modelPadded}${reset}${cyan}│${reset}`);
+        term.writeln(`${cyan}│${bold}${yellow} ${vLabel}${reset}${app_version}${" ".repeat(Math.max(0, innerWidth - (vLabel.length + app_version.length + 1)))}${cyan}│${reset}`);
+        term.writeln(`${cyan}│${bold}${magenta} ${mLabel}${reset}${model_id}${" ".repeat(Math.max(0, innerWidth - (mLabel.length + model_id.length + 1)))}${cyan}│${reset}`);
         term.writeln(`${cyan}└${horizontal}┘${reset}`);
         term.writeln('');
 
@@ -253,7 +223,6 @@ const Terminal = () => {
 
     initTerminal();
 
-    // Handle resize
     const handleResize = () => {
       const isMobile = window.innerWidth < 768;
       term.options.fontSize = isMobile ? 12 : 15;
@@ -263,42 +232,33 @@ const Terminal = () => {
 
     xtermRef.current = term;
 
-    // Handle user input
     term.onData(async (data) => {
-      // If we are waiting for AI response, ignore input
       if (isProcessing.current) return;
-
       const code = data.charCodeAt(0);
 
-      // Handle Enter (13)
       if (code === 13) {
         const prompt = inputBuffer.current.trim();
-        term.write('\r\n'); // Move to next line
+        term.write('\r\n');
         inputBuffer.current = '';
         setHasUserInput(false);
 
         if (prompt) {
           await handleCommand(prompt);
         } else {
-          // Empty prompt, just show user prompt again
           term.write('👤  ');
         }
         return;
       }
 
-      // Handle Backspace (127)
       if (code === 127) {
         if (inputBuffer.current.length > 0) {
           inputBuffer.current = inputBuffer.current.slice(0, -1);
-          term.write('\b \b'); // Move back, print space to erase, move back again
-          if (inputBuffer.current.length === 0) {
-            setHasUserInput(false);
-          }
+          term.write('\b \b');
+          if (inputBuffer.current.length === 0) setHasUserInput(false);
         }
         return;
       }
 
-      // Handle printable characters (ignore control chars mostly)
       if (code >= 32) {
         inputBuffer.current += data;
         term.write(data);
@@ -332,35 +292,22 @@ const Terminal = () => {
 
   const handleSaveConfirm = () => {
     if (!xtermRef.current || !saveName.trim()) return;
-
-    // Capture terminal content
     const buffer = xtermRef.current.buffer.active;
     const lines: string[] = [];
     for (let i = 0; i < buffer.length; i++) {
       const line = buffer.getLine(i);
-      if (line) {
-        lines.push(line.translateToString(true));
-      }
+      if (line) lines.push(line.translateToString(true));
     }
     const content = lines.join('\n').trim();
-
-    // Save to local storage
-    if (content) {
-      localStorage.setItem(`chat_${saveName}`, content);
-      // Maybe show specific feedback? For now, close modal.
-    }
+    if (content) localStorage.setItem(`chat_${saveName}`, content);
     setIsModalOpen(false);
-    // Refocus terminal
     xtermRef.current.focus();
   };
 
   const handleClearInput = () => {
     if (xtermRef.current && inputBuffer.current.length > 0) {
       const len = inputBuffer.current.length;
-      // Erase characters visually
-      for (let i = 0; i < len; i++) {
-        xtermRef.current.write('\b \b');
-      }
+      for (let i = 0; i < len; i++) xtermRef.current.write('\b \b');
       inputBuffer.current = '';
       xtermRef.current.focus();
       setHasUserInput(false);
@@ -378,56 +325,152 @@ const Terminal = () => {
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <div
+    <Box sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#1e293b' }}>
+      {/* Top Controls Overlay */}
+      <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}>
+        <Stack direction="row" spacing={1}>
+          <Tooltip title="New Chat">
+            <IconButton
+              size="small"
+              onClick={handleNew}
+              disabled={!hasAiResponse}
+              sx={{
+                bgcolor: 'rgba(99, 102, 241, 0.1)',
+                color: 'primary.main',
+                border: '1px solid rgba(99, 102, 241, 0.2)',
+                '&:hover': { bgcolor: 'rgba(99, 102, 241, 0.2)' },
+                '&.Mui-disabled': { bgcolor: 'transparent', color: 'action.disabled', border: 'none' }
+              }}
+            >
+              <AddCircleOutlineIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Save Session">
+            <IconButton
+              size="small"
+              onClick={handleSaveOpen}
+              disabled={!hasAiResponse}
+              sx={{
+                bgcolor: 'rgba(99, 102, 241, 0.1)',
+                color: 'primary.main',
+                border: '1px solid rgba(99, 102, 241, 0.2)',
+                '&:hover': { bgcolor: 'rgba(99, 102, 241, 0.2)' },
+                '&.Mui-disabled': { bgcolor: 'transparent', color: 'action.disabled', border: 'none' }
+              }}
+            >
+              <SaveIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      </Box>
+
+      <Box
         ref={terminalRef}
-        style={{
+        sx={{
+          flexGrow: 1,
           width: '100%',
-          height: '100%',
-          backgroundColor: '#1e1e1e',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          minHeight: 0,
+          p: 1.5,
+          pb: 6, // Padding to push prompt up slightly so it's visible 'through' the transparent footer
+          '& .xterm-viewport': {
+            '&::-webkit-scrollbar': { width: '8px' },
+            '&::-webkit-scrollbar-track': { background: 'transparent' },
+            '&::-webkit-scrollbar-thumb': { background: 'rgba(255,255,255,0.1)', borderRadius: '4px' },
+            '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(255,255,255,0.2)' },
+          }
         }}
       />
 
-      {/* Top Right Controls */}
-      <div style={{ position: 'absolute', top: 10, right: 30, zIndex: 10 }}>
-        <SpaceBetween direction="horizontal" size="xs">
-          <Button onClick={handleNew} variant="primary" disabled={!hasAiResponse}>new</Button>
-          <Button onClick={handleSaveOpen} variant="primary" disabled={!hasAiResponse}>save</Button>
-        </SpaceBetween>
-      </div>
-
-      {/* Bottom Right Controls */}
-      <div style={{ position: 'absolute', bottom: 40, right: 30, zIndex: 10 }}>
-        <SpaceBetween direction="horizontal" size="xs">
-          <Button onClick={handleClearInput} variant="primary" disabled={!hasUserInput}>clear</Button>
-          <Button onClick={handleSubmit} variant="primary" disabled={!hasUserInput}>submit</Button>
-        </SpaceBetween>
-      </div>
-
-      <Modal
-        onDismiss={() => setIsModalOpen(false)}
-        visible={isModalOpen}
-        closeAriaLabel="Close modal"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-              <Button variant="primary" onClick={handleSaveConfirm}>Save</Button>
-            </SpaceBetween>
-          </Box>
-        }
-        header="Save Chat"
+      {/* Bottom Controls Overlay */}
+      <Box
+        sx={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          p: 1,
+          px: 2,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          pointerEvents: 'none'
+        }}
       >
-        <FormField label="Chat Name">
-          <Input
+        <Stack direction="row" spacing={1.5} sx={{ pointerEvents: 'auto' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={handleClearInput}
+            disabled={!hasUserInput}
+            sx={{
+              borderRadius: 1.5,
+              textTransform: 'none',
+              borderColor: 'divider',
+              color: 'text.secondary',
+              bgcolor: 'rgba(30, 41, 59, 0.4)', // Subtle semi-transparent background for buttons
+              backdropFilter: 'blur(4px)',
+              px: 2
+            }}
+          >
+            Clear
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            endIcon={<SendIcon />}
+            onClick={handleSubmit}
+            disabled={!hasUserInput}
+            sx={{
+              borderRadius: 1.5,
+              textTransform: 'none',
+              boxShadow: 'none',
+              px: 2
+            }}
+          >
+            Submit
+          </Button>
+        </Stack>
+      </Box>
+
+      <Dialog
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        PaperProps={{
+          sx: { borderRadius: 3, p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>Save Chat Session</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Provide a name to save this terminal session to your local storage.
+          </Typography>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Session Name"
+            fullWidth
+            variant="outlined"
             value={saveName}
-            onChange={({ detail }) => setSaveName(detail.value)}
-            placeholder="Enter a name for this session"
+            onChange={(e) => setSaveName(e.target.value)}
+            placeholder="e.g. data-analysis-session"
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
           />
-        </FormField>
-      </Modal>
-    </div>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setIsModalOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button
+            onClick={handleSaveConfirm}
+            variant="contained"
+            disabled={!saveName.trim()}
+            sx={{ textTransform: 'none', borderRadius: 2 }}
+          >
+            Save Session
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 
