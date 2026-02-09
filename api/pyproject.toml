@@ -5,8 +5,10 @@ description = "fastapi webservice for ai prompts"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "bandit>=1.9.3",
     "fastapi[all]>=0.128.5",
     "python-dotenv>=1.2.1",
+    "safety>=3.7.0",
     "strands-agents>=1.25.0",
     "strands-agents-tools>=0.2.20",
 ]

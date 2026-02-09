@@ -11,3 +11,5 @@ __pycache__/
 # ignore files
 .DS_Store
 Makefile
+.env
+.env.local
