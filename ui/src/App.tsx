@@ -1,6 +1,7 @@
 import { Box, Typography } from '@mui/material';
-import Terminal from '@/components/Terminal';
 import TerminalIcon from '@mui/icons-material/Terminal';
+// ..custom
+import Terminal from '@/components/Terminal';
 
 function App() {
   return (
@@ -50,7 +51,13 @@ function App() {
         </Box>
       </Box>
 
-      <Box sx={{ flexGrow: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <Box sx={{
+            flexGrow: 1,
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0
+        }}>
         <Terminal />
       </Box>
     </Box>
